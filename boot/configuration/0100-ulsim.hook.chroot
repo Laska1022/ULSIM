@@ -1,0 +1,20 @@
+#!/bin/sh
+set -eu
+id ulsim >/dev/null 2>&1 || useradd --create-home --shell /bin/bash ulsim
+passwd -l ulsim
+install -d -m 700 /home/ulsim/.ssh /etc/ulsim
+chown -R ulsim:ulsim /home/ulsim
+printf 'ulsim ALL=(root) NOPASSWD: /usr/bin/python3 -I -m ulsim.target *\n' > /etc/sudoers.d/ulsim
+chmod 440 /etc/sudoers.d/ulsim
+visudo -cf /etc/sudoers.d/ulsim
+systemctl enable NetworkManager.service avahi-daemon.service ulsim-provision.service
+systemctl disable ssh.service ssh.socket || true
+mkdir -p /etc/NetworkManager/conf.d
+printf '[ifupdown]\nmanaged=true\n[main]\nno-auto-default=\n' > /etc/NetworkManager/conf.d/10-ulsim.conf
+printf 'auto lo\niface lo inet loopback\n' > /etc/network/interfaces
+mkdir -p /etc/systemd/journald.conf.d
+printf '[Journal]\nStorage=volatile\nRuntimeMaxUse=32M\n' > /etc/systemd/journald.conf.d/ulsim.conf
+# Public artifacts must contain neither host keys nor a shared machine identity.
+rm -f /etc/ssh/ssh_host_* /etc/machine-id /var/lib/dbus/machine-id
+touch /etc/machine-id
+ln -s /etc/machine-id /var/lib/dbus/machine-id

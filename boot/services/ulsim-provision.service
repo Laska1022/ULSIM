@@ -1,0 +1,15 @@
+[Unit]
+Description=ULSIM physical USB key provisioning and secure management
+After=local-fs.target NetworkManager.service
+Wants=NetworkManager.service
+Before=ssh.service avahi-daemon.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/ulsim-provision
+RemainAfterExit=yes
+StandardOutput=journal+console
+StandardError=journal+console
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,59 @@
+name: Build and verify live image
+on:
+  workflow_dispatch:
+  workflow_call:
+permissions:
+  contents: read
+jobs:
+  image:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build real Debian hybrid image
+        run: bash boot/build/docker-build.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ulsim-live-amd64
+          path: |
+            dist/ulsim-live-amd64.img.xz
+            dist/ulsim-live-amd64.packages
+            dist/SHA256SUMS.txt
+            dist/BUILD-INFO.txt
+          if-no-files-found: error
+          retention-days: 14
+  vm:
+    needs: image
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        firmware: [bios, uefi]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: ulsim-live-amd64
+          path: dist
+      - name: Verify published checksum
+        working-directory: dist
+        run: sha256sum -c SHA256SUMS.txt && xz -dk ulsim-live-amd64.img.xz
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Install VM test dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y qemu-system-x86 qemu-utils ovmf dosfstools mtools
+          python -m pip install -e '.[test]'
+      - name: Boot, install Debian, reconnect, and verify web service
+        run: python tests/vm/run.py --image dist/ulsim-live-amd64.img --firmware ${{ matrix.firmware }} --work-dir dist/vm-${{ matrix.firmware }}
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: vm-evidence-${{ matrix.firmware }}
+          path: |
+            dist/vm-${{ matrix.firmware }}/*.log
+            dist/vm-${{ matrix.firmware }}/*.json
+          if-no-files-found: warn

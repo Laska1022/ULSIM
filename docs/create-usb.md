@@ -1,0 +1,15 @@
+# Prepare the installer and configuration USBs
+
+Use two USB drives for the initial release. The installer is a Debian hybrid ISO image named `.img` that supports direct raw writing; its Linux filesystem is not a Windows-writable configuration partition. A second FAT32 volume supplies the controller public key and a unique target identity. No Linux installation on the target is needed.
+
+1. Download `ulsim-live-amd64.img.xz` and `SHA256SUMS.txt` from a release whose BIOS and UEFI checks passed. In PowerShell run `Get-FileHash .\ulsim-live-amd64.img.xz -Algorithm SHA256` and compare the complete digest with the file. A checksum mismatch means stop and download again.
+2. In balenaEtcher select the compressed image, carefully select the installer USB, and flash. Alternatively extract it with 7-Zip and select the `.img` in Rufus; choose DD/raw mode if prompted. Writing erases that USB. Do not accept Windows offers to format its Linux partition afterward.
+3. Using Windows Disk Management, identify a separate small USB by capacity, format a FAT32 volume, and label it exactly `ULSIMCFG`. Formatting erases that selected USB. ULSIM's provisioning command deliberately never formats disks.
+4. Install the controller, then run `ulsim configure-usb --volume E:\` using the actual configuration drive. For Wi-Fi, run `ulsim configure-wifi --volume E:\ --ssid "Your network"`; the password is prompted without echo. `scripts/configure-usb.ps1 -Volume E:\` also checks the Windows volume label and format.
+5. Keep the printed JSON pairing record on the controller. The USB holds authorized public keys, a random device ID, a unique SSH host private key, and optional Wi-Fi credentials. Safely eject it and keep it private. Its secrets are consumed on boot when writable. This is not forensic secure erasure of flash memory; treat the physical device as sensitive.
+6. Insert both USBs into the old PC and select the installer in its boot menu. Ethernet DHCP is automatic. Firmware Secure Boot must be disabled for this first release. Legacy BIOS and UEFI use the same amd64 image.
+7. Pair using the record and the discovered IP. Discovery never establishes trust. If using a manually provisioned public key rather than the generated host-key record, compare the SHA256 fingerprint displayed on the target console.
+
+A live reboot loses its RAM filesystem. Recreate the provisioning volume from the controller before another live session; do not accept a changed host key silently. After Debian installation, the host identity and credentials reside on the installed disk and the USBs are no longer needed. One freshly provisioned configuration USB per target avoids cloned identities.
+
+Controllers retain their private SSH key under `%LOCALAPPDATA%\ulsim`. Generated keys have no passphrase for unattended reconnection and rely on Windows account ACLs/BitLocker. Keep that account secure and back up its inventory and key directory securely. Existing encrypted keys are not supported by unattended installation in this release.

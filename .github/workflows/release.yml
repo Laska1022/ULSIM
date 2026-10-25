@@ -1,0 +1,34 @@
+name: Release verified ULSIM artifacts
+on:
+  push:
+    tags: ['v*']
+permissions:
+  contents: read
+jobs:
+  validate:
+    uses: ./.github/workflows/build-image.yml
+  release:
+    needs: validate
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: ulsim-live-amd64
+          path: dist
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Build controller wheel
+        run: python -m pip install build && python -m build
+      - name: Publish release assets after BIOS and UEFI tests pass
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" \
+            dist/ulsim-live-amd64.img.xz dist/SHA256SUMS.txt \
+            dist/ulsim-live-amd64.packages dist/BUILD-INFO.txt dist/*.whl dist/*.tar.gz \
+            scripts/install-windows.ps1 AGENTS.md \
+            --title "ULSIM $GITHUB_REF_NAME" --generate-notes
