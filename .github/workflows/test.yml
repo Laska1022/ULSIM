@@ -24,6 +24,29 @@ jobs:
       - run: ulsim --help
       - name: Check Python compilation
         run: python -m compileall -q ulsim boot/scripts
+      - name: Install and run the Windows controller through PowerShell
+        if: matrix.os == 'windows-latest' && matrix.python == '3.13'
+        shell: powershell
+        env:
+          PY_PYTHON3: '3.13'
+        run: |
+          $ErrorActionPreference = 'Stop'
+          & .\scripts\install-windows.ps1
+          $InstalledPython = Join-Path $env:LOCALAPPDATA 'ULSIM\venv\Scripts\python.exe'
+          $InstalledCli = Join-Path $env:LOCALAPPDATA 'ULSIM\venv\Scripts\ulsim.exe'
+          if (-not (Test-Path $InstalledCli)) { throw 'The installer did not create the Windows CLI.' }
+          Push-Location $env:RUNNER_TEMP
+          try {
+              & $InstalledPython -I -c "import pathlib, sys, ulsim; assert sys.version_info[:2] == (3, 13); assert pathlib.Path(ulsim.__file__).resolve().is_relative_to(pathlib.Path(sys.prefix).resolve())"
+              if ($LASTEXITCODE -ne 0) { throw 'ULSIM was not imported from the installed Windows virtual environment.' }
+              & $InstalledCli --version
+              if ($LASTEXITCODE -ne 0) { throw 'The installed Windows CLI version check failed.' }
+              & $InstalledCli --help
+              if ($LASTEXITCODE -ne 0) { throw 'The installed Windows CLI help check failed.' }
+              Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value 'Windows PowerShell installer and installed controller smoke checks passed.'
+          } finally {
+              Pop-Location
+          }
       - name: Summarize test results
         if: always()
         shell: python {0}
