@@ -1,0 +1,16 @@
+{
+  "firmware": "uefi",
+  "partition_table": "gpt",
+  "image": "ulsim-live-amd64.img (audited integration build before final clean build)",
+  "passed": true,
+  "checks": [
+    "live boot, DHCP, CLI pairing, SSH key authentication and pinned host identity",
+    "hardware report, disposable disk identity, active installer protection",
+    "installation plan and rejection of missing approval",
+    "Debian debootstrap, kernel, partitioning and bootloader installation",
+    "installed-disk boot, DHCP, SSH reconnection and host identity continuity",
+    "nginx deployment and HTTP response through the installed server firewall"
+  ],
+  "image_sha256": "4dd118ef855122286c0cdf0acfd7334fc9128706a99ff71e8b4c3496007e946d",
+  "environment": "Codex cloud, QEMU TCG; disposable 16GiB qcow2 disk, no physical hardware"
+}

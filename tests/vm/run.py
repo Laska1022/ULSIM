@@ -166,9 +166,16 @@ def main() -> int:
     work = args.work_dir.resolve()
     work.mkdir(parents=True, exist_ok=False)
     os.chmod(work, 0o700)
+    digest = hashlib.sha256()
+    with args.image.open('rb') as image_file:
+        for block in iter(lambda: image_file.read(1024 * 1024), b''):
+            digest.update(block)
     result = {"firmware": args.firmware, "partition_table": args.partition_table,
-              "image": str(args.image), "passed": False, "checks": []}
+              "image": str(args.image), "image_sha256": digest.hexdigest(), "passed": False, "checks": []}
     vm = None
+    installer_process = None
+    installer_output = None
+    installer_errors = None
 
     def controller(*arguments):
         command = [sys.executable, '-m', 'ulsim', '--state-dir', str(work / 'controller-state'),
@@ -234,13 +241,31 @@ def main() -> int:
         else:
             raise AssertionError("Target accepted installation without valid explicit approval")
         passed("installation plan and rejection of missing approval")
-        queued = controller('install', '--plan', work / 'plan.json', '--approve', plan['plan_id'])
-        assert queued['plan_id'] == plan['plan_id']
+        # Exercise the complete public orchestration command while this harness
+        # handles the physical act of removing the USB at the reboot boundary.
+        installer_output = (work / 'controller-install.json').open('w')
+        installer_errors = (work / 'controller-install.log').open('w')
+        installer_process = subprocess.Popen(
+            [sys.executable, '-m', 'ulsim', '--state-dir', str(work / 'controller-state'),
+             'install', '--plan', str(work / 'plan.json'), '--approve', plan['plan_id'],
+             '--wait', '--timeout', str(args.install_timeout), '--json'],
+            cwd=Path(__file__).resolve().parents[2], stdout=installer_output, stderr=installer_errors)
         deadline = time.monotonic() + args.install_timeout
         previous = None
+        def controller_reboot_started():
+            from ulsim.inventory import Inventory
+            journal = Inventory(work / 'controller-state').job(plan['plan_id'])
+            return journal and journal['stage'] in {'rebooting', 'reconnecting', 'configuring', 'verifying', 'complete'}
         while time.monotonic() < deadline:
+            if vm.process.poll() is not None and controller_reboot_started():
+                break
             vm.ensure_running()
-            state = remote.rpc("status")
+            try:
+                state = remote.rpc("status")
+            except Exception:
+                if controller_reboot_started():
+                    break  # CLI already received ready and initiated the real reboot.
+                raise
             (work / "installation-status.json").write_text(json.dumps(state, indent=2))
             stage = state.get("stage", state.get("state"))
             if stage != previous:
@@ -253,11 +278,15 @@ def main() -> int:
             time.sleep(5)
         else:
             raise TimeoutError(f"Installation did not finish after {args.install_timeout}s")
-        (work / "installation-logs.json").write_text(json.dumps(remote.rpc("logs"), indent=2))
+        try:
+            (work / "installation-logs.json").write_text(json.dumps(remote.rpc("logs"), indent=2))
+        except Exception:
+            if not controller_reboot_started():
+                raise
         passed("Debian debootstrap, kernel, partitioning and bootloader installation")
         # Request the actual reboot. -no-reboot makes QEMU stop at firmware reset,
         # allowing USB removal without racing the live image's next boot.
-        remote.rpc("reboot")
+        # The running CLI requests reboot itself after seeing ready.
         vm.process.wait(timeout=90)
         # Cold boot with neither live USB nor config disk attached proves the installed
         # disk boots independently. It also exercises trust transfer, not TOFU.
@@ -270,7 +299,13 @@ def main() -> int:
         assert installed_identity["os_id"] == "debian" and installed_identity["os_version"] == "13"
         installed_report = remote.rpc("inspect")
         assert installed_report["boot_mode"] == args.firmware
+        (work / "installation-logs.json").write_text(json.dumps(remote.rpc("logs"), indent=2))
         passed("installed-disk boot, DHCP, SSH reconnection and host identity continuity")
+        installer_process.wait(timeout=900)
+        installer_output.flush()
+        completion = json.loads((work / 'controller-install.json').read_text())
+        assert installer_process.returncode == 0 and completion.get('stage') == 'complete', completion
+        passed("controller install --wait automatically reconnects, configures, verifies and completes its journal")
         controller('pair', '--host', '127.0.0.1', '--port', vm.ssh_port,
                    '--fingerprint', host_fingerprint, '--key', key, '--name', 'vm')
         inventory = controller('servers')
@@ -313,6 +348,17 @@ def main() -> int:
         print(f"FAIL: {result['error']}", file=sys.stderr, flush=True)
         return 1
     finally:
+        if installer_process and installer_process.poll() is None:
+            installer_process.terminate()
+            try:
+                installer_process.wait(timeout=10)
+            except subprocess.TimeoutExpired:
+                installer_process.kill()
+                installer_process.wait()
+        if installer_output:
+            installer_output.close()
+        if installer_errors:
+            installer_errors.close()
         if vm:
             vm.stop()
         (work / "result.json").write_text(json.dumps(result, indent=2))

@@ -25,3 +25,9 @@ Known integration findings being fixed: installer ready state must wait for clea
 - Fixed privileged target file ownership (root-owned, non-user-writable) and ensured public images contain no shared private host key, machine ID, provisioned network settings, or added cloud trust roots.
 - Actual installation/reboot/application VM acceptance still running; no completed-release claim. Rebuild with final boot configuration and validate both boot modes before publication.
 - GitHub API access is blocked by cloud proxy (403 on CONNECT); branch push succeeded. Setup/start instructions and api.github.com/adguardteam.github.io additions were saved as an environment draft, not applied or published.
+
+## Verified Debian installation milestone
+
+BIOS/GPT and UEFI/GPT real QEMU tests both passed all six baseline checks: automatic live boot and DHCP, controller CLI pairing, hardware/disk protection, explicit plan approval, actual debootstrap/kernel/GRUB installation, independent installed-disk boot with USB removed and unchanged SSH trust, and Nginx HTTP response. Evidence is in docs/validation. These checks used the audited integration image.
+
+The final clean image build also succeeded at source revision 600b82af4631bcd5a95b2115df130ee1ea83529f. Its compressed checksum verified. Fresh BIOS/UEFI runs against that exact image are exercising the full `install --wait` controller state machine; the BIOS run additionally requests all five profiles. These runs are still in progress.
