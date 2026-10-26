@@ -240,6 +240,8 @@ Description=ULSIM AdGuard Home DNS filtering
 After=network-online.target
 Wants=network-online.target
 [Service]
+StateDirectory=ulsim/adguard
+StateDirectoryMode=0700
 ExecStart=/opt/ulsim-adguard/AdGuardHome --no-check-update -c /etc/ulsim/AdGuardHome.yaml -w /var/lib/ulsim/adguard
 Restart=on-failure
 NoNewPrivileges=true
