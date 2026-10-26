@@ -15,10 +15,32 @@ import socket
 import subprocess
 import sys
 import time
+from urllib.parse import urlsplit
 
 CONFIG = Path('/etc/ulsim')
 MAX_REQUEST = 1024 * 1024
 OPERATIONS = {'identity', 'inspect', 'install', 'status', 'logs', 'health', 'services', 'configure', 'update', 'reboot'}
+
+
+def apply_network_configuration():
+    """Load only physically provisioned, root-owned egress settings."""
+    path = CONFIG / 'proxy.json'
+    if not path.exists():
+        return
+    if path.is_symlink() or path.stat().st_uid != 0 or path.stat().st_mode & 0o022:
+        raise ValueError('Provisioned network configuration must be root-owned and private')
+    values = json.loads(path.read_text())
+    if not isinstance(values, dict) or set(values) - {'http_proxy', 'https_proxy'}:
+        raise ValueError('Invalid provisioned network configuration')
+    for name, value in values.items():
+        if not isinstance(value, str) or any(c.isspace() or ord(c) < 32 for c in value):
+            raise ValueError('Invalid provisioned proxy URL')
+        parsed = urlsplit(value)
+        if (parsed.scheme != 'http' or not parsed.hostname or not parsed.port or parsed.username is not None
+                or parsed.password is not None or parsed.path not in ('', '/') or parsed.query or parsed.fragment):
+            raise ValueError('Invalid provisioned proxy URL')
+    os.environ.update(values)
+    os.environ['no_proxy'] = 'localhost,127.0.0.1,::1'
 
 
 def identity():
@@ -126,6 +148,7 @@ def main(argv=None):
         payload = json.loads(raw) if raw.strip() else {}
         # Any helper diagnostics go to stderr, keeping stdout exactly one JSON document.
         with contextlib.redirect_stdout(sys.stderr):
+            apply_network_configuration()
             response = dispatch(argv[0], payload)
         print(json.dumps(response, sort_keys=True))
         return 0

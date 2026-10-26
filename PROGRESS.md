@@ -16,3 +16,12 @@ Current work: finish image build with trusted cloud proxy configuration; keep bu
 Architecture: Debian 13 amd64 live-build hybrid USB; two-drive Windows provisioning (installer + FAT ULSIMCFG); unique physically transferred ED25519 host keys; isolated-Python target RPC; stable disk serial/WWN + exact plan hash required; native Debian profiles; optional Alpine/Ubuntu recommendations only. Secure Boot and i386 are unsupported in this release. No external data disk is silently formatted or mounted.
 
 Known integration findings being fixed: installer ready state must wait for clean unmount; installed identity must match exact approved plan; service verification must return affirmative results. See implementation and tests for final state.
+
+## Integration update
+
+- 143 automated tests passed, including real SSH and mDNS protocols, eMMC identity fallback, resume failure handling, and SSH public-key comment normalization.
+- Full saved image build completed and exact SquashFS audit passed; produced a real amd64 BIOS/UEFI image, compressed image, SHA256 and source manifests. This build preceded the automatic-boot configuration correction.
+- First real VM boots diagnosed indefinite default boot menus. Added explicit three-second BIOS/UEFI text-mode autoboot configurations. Both modes now enter the Linux kernel and live init in fresh VM runs.
+- Fixed privileged target file ownership (root-owned, non-user-writable) and ensured public images contain no shared private host key, machine ID, provisioned network settings, or added cloud trust roots.
+- Actual installation/reboot/application VM acceptance still running; no completed-release claim. Rebuild with final boot configuration and validate both boot modes before publication.
+- GitHub API access is blocked by cloud proxy (403 on CONNECT); branch push succeeded. Setup/start instructions and api.github.com/adguardteam.github.io additions were saved as an environment draft, not applied or published.

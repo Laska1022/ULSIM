@@ -41,6 +41,31 @@ def _read(path: str) -> str | None:
         return None
 
 
+def disk_identity(path: str, serial: str | None = None, wwn: str | None = None) -> dict[str, str | None]:
+    """Read a stable whole-disk identity using lsblk and the kernel's MMC data.
+
+    Some eMMC/SD drivers expose no udev ID_SERIAL, so lsblk's SERIAL is empty.
+    The kernel's read-only device attributes identify the same card without
+    opening it. CID is a card identifier, not a WWN; its fallback is labelled
+    in the serial field rather than masquerading as a World Wide Name.
+    Call this helper again immediately before writes to detect a changed card.
+    """
+    identity = {"serial": serial.strip() if serial and serial.strip() else None,
+                "wwn": wwn.strip() if wwn and wwn.strip() else None}
+    match = re.fullmatch(r"/dev/(mmcblk\d+)", path)
+    if identity["serial"] is not None or match is None:
+        return identity
+    device = f"/sys/class/block/{match[1]}/device"
+    kernel_serial = _read(f"{device}/serial")
+    if kernel_serial and re.fullmatch(r"0[xX][0-9a-fA-F]{8}", kernel_serial) and int(kernel_serial, 16):
+        identity["serial"] = f"0x{int(kernel_serial, 16):08x}"
+        return identity
+    cid = _read(f"{device}/cid")
+    if cid and re.fullmatch(r"[0-9a-fA-F]{32}", cid) and int(cid, 16):
+        identity["serial"] = "mmc-cid:" + cid.lower()
+    return identity
+
+
 def parse_meminfo(text: str) -> dict[str, int | None]:
     values: dict[str, int] = {}
     for line in text.splitlines():
@@ -122,7 +147,7 @@ def parse_storage(lsblk: dict[str, Any], live_sources: list[str]) -> tuple[list[
         medium = ("eMMC/SD" if re.fullmatch(r"/dev/mmcblk\d+", path) else "USB" if transport == "usb"
                   else "HDD" if node.get("rota") in (True, 1, "1") else "SSD" if node.get("rota") in (False, 0, "0") else None)
         result.append({"path": path, "size_bytes": int(node.get("size") or 0), "model": node.get("model"),
-                       "serial": node.get("serial") or None, "wwn": node.get("wwn") or None,
+                       **disk_identity(path, node.get("serial"), node.get("wwn")),
                        "transport": transport, "medium": medium, "removable": bool(node.get("rm")),
                        "read_only": bool(node.get("ro")), "installer": path in live_disks,
                        "mounted": bool(mountpoints), "mountpoints": mountpoints,

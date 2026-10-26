@@ -55,7 +55,11 @@ def finish_install(inventory: Inventory, plan: dict, timeout=3600, resume=False,
     if job["stage"] == "failed":
         if not resume:
             raise ValueError("Installation failed; inspect logs before using --resume. Resume never repartitions a disk")
-        inventory.transition(job_id, "reconnecting")
+        resume_stage = job.get("detail", {}).get("resume_stage", "reconnecting")
+        # These phases only poll/reboot/configure; the sole disk-start RPC lives in CLI.
+        if resume_stage not in {"preparing", "installing", "bootloader", "rebooting", "reconnecting", "configuring", "verifying"}:
+            resume_stage = "reconnecting"
+        job = inventory.transition(job_id, resume_stage)
     try:
         if job["stage"] in {"approved", "preparing", "installing", "bootloader"}:
             deadline = time.monotonic() + timeout
@@ -105,5 +109,5 @@ def finish_install(inventory: Inventory, plan: dict, timeout=3600, resume=False,
             return inventory.transition(job_id, "complete", {"services": services, "health": health})
     except Exception as exc:
         if inventory.job(job_id)["stage"] != "failed":
-            inventory.transition(job_id, "failed", {"error": str(exc)})
+            inventory.transition(job_id, "failed", {"error": str(exc), "resume_stage": inventory.job(job_id)["stage"]})
         raise

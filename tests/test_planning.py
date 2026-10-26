@@ -152,3 +152,18 @@ def test_unknown_hardware_does_not_invent_recommendation():
     result = recommend({})
     assert all(a['suitability'] == 'unknown' for a in result['workloads'])
     assert result['budget']['ram_bytes'] is None
+
+
+@pytest.mark.parametrize('boot_mode,table', [('bios', 'gpt'), ('bios', 'mbr'), ('uefi', 'gpt')])
+def test_partition_preview_matches_installer_partition_sizes(boot_mode, table):
+    from ulsim.installer import partition_layout as installer_layout
+    hardware = report()
+    hardware['boot_mode'] = boot_mode
+    proposed = create_plan(hardware, '/dev/vda', 'server', [], key(), partition_table=table)
+    preview = partition_layout(proposed)
+    script, root_partition, esp_partition = installer_layout(proposed)
+    assert preview[-1]['number'] == root_partition
+    assert preview[-1]['filesystem'] == 'ext4'
+    if len(preview) > 1:
+        assert f"size={preview[0]['size_mib']}M," in script
+    assert (esp_partition is not None) == (boot_mode == 'uefi')

@@ -21,21 +21,25 @@ mkdir -p "$BUILD_DIR" "$OUTPUT_DIR"
 cd "$BUILD_DIR"
 # Retain verified package/bootstrap caches while discarding stale stage outputs.
 if [ -f config/common ]; then lb clean; fi
-lb config --mode debian --distribution trixie --architectures amd64 \
-  --binary-images iso-hybrid --bootloaders 'syslinux grub-efi' \
+rm -f config/hooks/live/0999-build-trust.hook.chroot
+lb config --mode debian --distribution trixie --architectures amd64 --build-with-chroot false \
+  --binary-images iso-hybrid --bootloaders 'syslinux grub-efi' --uefi-secure-boot disable \
   --archive-areas 'main contrib non-free non-free-firmware' \
-  --apt-secure true --apt-recommends false --debian-installer false --cache-stages bootstrap \
-  --security true --updates true --firmware-chroot true --firmware-binary true \
+  --apt-secure true --apt-recommends false --debian-installer none --cache-stages bootstrap \
+  --security true --updates true --firmware-chroot false --firmware-binary false \
   --linux-flavours amd64 --memtest none --iso-volume ULSIM_LIVE \
   --mirror-bootstrap https://deb.debian.org/debian/ \
   --mirror-chroot https://deb.debian.org/debian/ \
   --mirror-binary https://deb.debian.org/debian/ \
   --mirror-chroot-security https://security.debian.org/debian-security/ \
   --mirror-binary-security https://security.debian.org/debian-security/ \
-  --bootappend-live 'boot=live components live-config.nocomponents=user-setup,ssh hostname=ulsim locales=en_US.UTF-8 keyboard-layouts=us'
+  --bootappend-live 'boot=live components console=tty0 console=ttyS0,115200n8 live-config.nocomponents=user-setup,ssh hostname=ulsim locales=en_US.UTF-8 keyboard-layouts=us'
 mkdir -p config/package-lists config/includes.chroot/usr/local/lib/python3.13/dist-packages \
   config/includes.chroot/usr/local/sbin config/includes.chroot/etc/systemd/system \
   config/includes.chroot/etc/ssh/sshd_config.d config/hooks/live
+mkdir -p config/includes.binary/isolinux config/includes.binary/boot/grub
+install -m 644 "$SOURCE_DIR/boot/configuration/isolinux.cfg" config/includes.binary/isolinux/isolinux.cfg
+install -m 644 "$SOURCE_DIR/boot/configuration/grub.cfg" config/includes.binary/boot/grub/config.cfg
 cp "$SOURCE_DIR/boot/configuration/packages.list.chroot" config/package-lists/ulsim.list.chroot
 rm -rf config/includes.chroot/usr/local/lib/python3.13/dist-packages/ulsim
 cp -a "$SOURCE_DIR/ulsim" config/includes.chroot/usr/local/lib/python3.13/dist-packages/
@@ -66,9 +70,13 @@ fi
 if [ -n "$(find chroot/etc/ssh -maxdepth 1 -name 'ssh_host_*_key' -print -quit)" ]; then
   echo 'Refusing to distribute SSH host private keys' >&2; exit 1
 fi
+# Binary assembly uses the builder's pinned Debian tooling. The cleaned live
+# root never needs network access again and retains no build-only proxy trust.
+export MKSQUASHFS_OPTIONS="-processors ${ULSIM_BUILD_JOBS:-2}"
 lb binary
 test -s live-image-amd64.hybrid.iso
 python3 "$SOURCE_DIR/boot/build/validate-image.py" live-image-amd64.hybrid.iso
+python3 "$SOURCE_DIR/boot/build/audit-rootfs.py" binary/live/filesystem.squashfs "$SOURCE_DIR" "$OUTPUT_DIR/SOURCE-SHA256SUMS.txt"
 cp live-image-amd64.hybrid.iso "$OUTPUT_DIR/ulsim-live-amd64.img"
 cp live-image-amd64.packages "$OUTPUT_DIR/ulsim-live-amd64.packages"
 xz -T2 -6 -k -f "$OUTPUT_DIR/ulsim-live-amd64.img"
@@ -76,4 +84,4 @@ cd "$OUTPUT_DIR"
 sha256sum ulsim-live-amd64.img.xz > SHA256SUMS.txt
 printf 'Debian trixie amd64 live-build; BIOS and UEFI hybrid image\n' > BUILD-INFO.txt
 date -u '+Built: %Y-%m-%dT%H:%M:%SZ' >> BUILD-INFO.txt
-git -C "$SOURCE_DIR" rev-parse HEAD >> BUILD-INFO.txt 2>/dev/null || true
+printf 'Source revision: %s\n' "${ULSIM_SOURCE_REVISION:-unknown}" >> BUILD-INFO.txt

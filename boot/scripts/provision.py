@@ -182,8 +182,8 @@ def main() -> None:
                 raise ValueError("Host private key requires matching public key")
             shutil.copyfile(private, hostkey)
             hostkey.chmod(0o600)
-            derived = run("ssh-keygen", "-y", "-f", str(hostkey)).stdout.strip()
-            expected = " ".join(public.read_text().strip().split()[:2])
+            derived = validate_public_keys(run("ssh-keygen", "-y", "-f", str(hostkey)).stdout).strip()
+            expected = validate_public_keys(public.read_text()).strip()
             if not derived.startswith("ssh-ed25519 ") or derived != expected:
                 hostkey.unlink()
                 raise ValueError("Provisioned host key pair does not match")
@@ -213,6 +213,7 @@ def main() -> None:
                            f'<port>22</port><txt-record>device_id={identity}</txt-record>'
                            '<txt-record>mode=live</txt-record></service></service-group>\n')
         # ssh.service normally creates RuntimeDirectory; validate before queuing it.
+        Path("/run/sshd").mkdir(mode=0o755, exist_ok=True)
         Path("/run/sshd").mkdir(mode=0o755, exist_ok=True)
         run("sshd", "-t")
         run("systemctl", "--no-block", "start", "ssh.service")

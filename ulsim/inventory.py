@@ -15,7 +15,7 @@ STAGES = {
     "reconnecting": {"configuring", "failed"},
     "configuring": {"verifying", "failed"},
     "verifying": {"complete", "failed"}, "complete": set(),
-    "failed": {"reconnecting"},
+    "failed": {"preparing", "installing", "bootloader", "rebooting", "reconnecting", "configuring", "verifying"},
 }
 
 

@@ -135,7 +135,7 @@ def execute(args, inventory):
             result = remote_for(device).rpc("install", {"plan":plan,"approval":args.approve})
             inventory.transition(plan["plan_id"], "preparing", result)
         except Exception as exc:
-            inventory.transition(plan["plan_id"], "failed", {"error":str(exc)})
+            inventory.transition(plan["plan_id"], "failed", {"error":str(exc), "resume_stage":"preparing"})
             raise
         return finish_install(inventory, plan, args.timeout, secrets=credentials) if args.wait else result
     if name == "recommend" and args.report:

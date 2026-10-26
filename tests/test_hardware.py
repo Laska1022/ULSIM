@@ -151,3 +151,60 @@ def test_collection_reports_unavailable_without_fabrication():
     assert result['device_id'] is None
     assert result['installer_media']['identified'] is False
     assert any('unavailable' in note for note in result['unknowns'])
+
+
+def test_mmc_identity_uses_kernel_serial_when_lsblk_has_none():
+    from ulsim.hardware import disk_identity
+    with patch('ulsim.hardware._read', return_value='0xA12B34CD') as read:
+        assert disk_identity('/dev/mmcblk0') == {'serial': '0xa12b34cd', 'wwn': None}
+    read.assert_called_once_with('/sys/class/block/mmcblk0/device/serial')
+
+
+def test_mmc_identity_preserves_lsblk_serial_and_wwn():
+    from ulsim.hardware import disk_identity
+    with patch('ulsim.hardware._read') as read:
+        assert disk_identity('/dev/mmcblk0', ' detected-serial ', ' existing-wwn ') == {
+            'serial': 'detected-serial', 'wwn': 'existing-wwn'}
+    read.assert_not_called()
+
+
+def test_mmc_cid_fallback_is_labelled_not_reported_as_wwn():
+    from ulsim.hardware import disk_identity
+    cid = '0123456789ABCDEF0123456789ABCDEF'
+    with patch('ulsim.hardware._read', side_effect=[None, cid]):
+        assert disk_identity('/dev/mmcblk2') == {'serial': 'mmc-cid:' + cid.lower(), 'wwn': None}
+
+
+@pytest.mark.parametrize('serial,cid', [(None, None), ('0x00000000', '0'*32),
+                                       ('invalid', 'not-a-cid'), ('0x1234', 'abcd'),
+                                       ('0x12345678\nINJECTED', 'z'*32)])
+def test_mmc_unknown_or_invalid_identity_stays_unknown(serial, cid):
+    from ulsim.hardware import disk_identity
+    with patch('ulsim.hardware._read', side_effect=[serial, cid]):
+        assert disk_identity('/dev/mmcblk0') == {'serial': None, 'wwn': None}
+
+
+@pytest.mark.parametrize('path', ['/dev/vda', '/dev/sda', '/dev/mmcblk0p1', '/dev/mmcblk0boot0',
+                                  '/dev/mmcblk0/../../etc', '/tmp/mmcblk0'])
+def test_mmc_fallback_only_reads_whole_kernel_mmc_devices(path):
+    from ulsim.hardware import disk_identity
+    with patch('ulsim.hardware._read') as read:
+        assert disk_identity(path) == {'serial': None, 'wwn': None}
+    read.assert_not_called()
+
+
+def test_mmc_serial_fallback_flows_through_inspection_and_revalidation():
+    source = tree()
+    destination = source['blockdevices'][1]
+    destination.update(name='mmcblk0', path='/dev/mmcblk0', serial=None)
+    destination['children'] = []
+    with patch('ulsim.hardware._read', return_value='0x12345678'):
+        disks, media = parse_storage(source, ['/dev/sda1'])
+    current = {'disks': disks, 'installer_media': media}
+    approved = identity(current)
+    assert approved['serial'] == '0x12345678'
+    assert validate_destination(current, approved)['path'] == '/dev/mmcblk0'
+    with patch('ulsim.hardware._read', return_value='0x99999999'):
+        changed_disks, _ = parse_storage(source, ['/dev/sda1'])
+    with pytest.raises(ValueError, match='serial changed'):
+        validate_destination({'disks': changed_disks, 'installer_media': media}, approved)

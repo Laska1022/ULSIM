@@ -25,7 +25,8 @@ The runner verifies:
 
 1. Live BIOS/UEFI boot, DHCP, SSH public-key authentication, and a host key pinned
    through the FAT provisioning volume.
-2. Hardware inspection, the unique disposable disk identity, and rejection of
+2. Actual controller CLI pairing, inventory, hardware inspection, installation planning,
+   queued installation, and the unique disposable disk identity, plus rejection of
    the active live medium as an installation target.
 3. Rejection of an unapproved installation.
 4. Actual partitioning, debootstrap, kernel, bootloader and SSH installation.
@@ -68,3 +69,12 @@ verification remain enabled. The installer carries this explicit network
 configuration into the installed server so package operations continue to work.
 Never publish the private directory, configuration disk, or VM disk. This option
 does not modify the public image and is not required on an ordinary home LAN.
+
+## Extended profile validation
+
+Add `--all-profiles` to a BIOS or UEFI acceptance run to deploy AdGuard Home,
+Samba, WireGuard, Nginx and MiniDLNA after the core installed-disk HTTP test.
+The runner generates an ephemeral Samba password in memory; it never appears
+in argv, saved plans or artifacts. This extended check needs GitHub release
+and DNS upstream access in addition to Debian mirrors. A failure is reported
+as a failed acceptance run, with individual check evidence retained.

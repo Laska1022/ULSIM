@@ -181,6 +181,13 @@ def firewall(config):
 
 
 def _dns(config):
+    # AdGuard owns port 53. Keep DHCP-provided upstream resolution while freeing
+    # systemd-resolved's local stub; changing DNS service must not break apt.
+    _write('/etc/systemd/resolved.conf.d/ulsim-dns.conf', '[Resolve]\nDNSStubListener=no\n')
+    resolver = Path('/etc/resolv.conf')
+    resolver.unlink(missing_ok=True)
+    resolver.symlink_to('/run/systemd/resolve/resolv.conf')
+    _run(['systemctl', 'restart', 'systemd-resolved'])
     directory = Path('/opt/ulsim-adguard')
     binary = directory / 'AdGuardHome'
     stamp = directory / 'version'
@@ -362,7 +369,14 @@ def _dns_check():
     if len(reply) < 12:
         return False
     identifier, flags = struct.unpack('!HH', reply[:4])
-    return identifier == txid and flags & 0x8000 != 0 and flags & 15 == 3
+    response_ok = identifier == txid and flags & 0x8000 != 0 and flags & 15 == 3
+    if not response_ok:
+        return False
+    # NXDOMAIN alone could be the upstream's answer for .invalid. Also confirm
+    # AdGuard classifies this request as blocked by its configured filter rule.
+    with urllib.request.urlopen('http://127.0.0.1:3000/control/filtering/check_host?name=ulsim-block-test.invalid', timeout=5) as response:
+        decision = json.loads(response.read(65536))
+    return decision.get('reason') == 'FilteredBlackList' 
 
 
 def _functional(name):

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import re
 from pathlib import Path
 import socket
 import subprocess
@@ -32,6 +33,8 @@ def main() -> int:
         if name.lower() == "no_proxy":
             continue
         proxy = urlsplit(environment[name])
+        if proxy.username is not None or proxy.password is not None:
+            raise ValueError("Authenticated build proxy URLs are unsupported; do not expose credentials to build logs")
         if not proxy.hostname:
             raise ValueError(f"{name} has no proxy hostname")
         if proxy.hostname not in hosts:
@@ -42,9 +45,17 @@ def main() -> int:
             hosts.add(proxy.hostname)
     build += [str(source / "boot/build")]
     subprocess.run(build, env=environment, check=True)
-    run += ["--mount", f"type=bind,source={source},target=/src,readonly",
+    volume = environment.get("ULSIM_BUILD_VOLUME", "ulsim-live-build")
+    if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.-]+", volume):
+        raise ValueError("ULSIM_BUILD_VOLUME must be a valid Docker named volume")
+    revision = subprocess.run(["git", "-C", str(source), "rev-parse", "HEAD"], capture_output=True, text=True)
+    environment["ULSIM_SOURCE_REVISION"] = revision.stdout.strip() if revision.returncode == 0 else "unknown"
+    dirty = subprocess.run(["git", "-C", str(source), "status", "--porcelain"], capture_output=True, text=True)
+    if dirty.returncode == 0 and dirty.stdout.strip():
+        environment["ULSIM_SOURCE_REVISION"] += "-dirty"
+    run += ["--env", "ULSIM_SOURCE_REVISION", "--mount", f"type=bind,source={source},target=/src,readonly",
             "--mount", f"type=bind,source={output},target=/out",
-            "--mount", "type=volume,source=ulsim-live-build,target=/build"]
+            "--mount", f"type=volume,source={volume},target=/build"]
     trust = environment.get("ULSIM_BUILD_CA_DIR")
     if trust:
         directory = Path(trust).resolve(strict=True)
@@ -52,7 +63,7 @@ def main() -> int:
             raise ValueError("ULSIM_BUILD_CA_DIR must contain the explicitly trusted build CA .crt files")
         run += ["--mount", f"type=bind,source={directory},target=/build-ca,readonly",
                 "--env", "ULSIM_BUILD_CA_DIR=/build-ca"]
-    run += ["ulsim-image-builder"]
+    run += ["--entrypoint", "/bin/bash", "ulsim-image-builder", "-c", "cp /src/boot/build/build.sh /tmp/ulsim-build.sh && exec bash /tmp/ulsim-build.sh"]
     return subprocess.run(run, env=environment).returncode
 
 

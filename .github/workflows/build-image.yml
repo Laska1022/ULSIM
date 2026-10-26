@@ -20,6 +20,7 @@ jobs:
             dist/ulsim-live-amd64.packages
             dist/SHA256SUMS.txt
             dist/BUILD-INFO.txt
+            dist/SOURCE-SHA256SUMS.txt
           if-no-files-found: error
           retention-days: 14
   vm:

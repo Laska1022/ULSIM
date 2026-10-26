@@ -29,6 +29,6 @@ jobs:
         run: |
           gh release create "$GITHUB_REF_NAME" \
             dist/ulsim-live-amd64.img.xz dist/SHA256SUMS.txt \
-            dist/ulsim-live-amd64.packages dist/BUILD-INFO.txt dist/*.whl dist/*.tar.gz \
+            dist/ulsim-live-amd64.packages dist/BUILD-INFO.txt dist/SOURCE-SHA256SUMS.txt dist/*.whl dist/*.tar.gz \
             scripts/install-windows.ps1 AGENTS.md \
             --title "ULSIM $GITHUB_REF_NAME" --generate-notes

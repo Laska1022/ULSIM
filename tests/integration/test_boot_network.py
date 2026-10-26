@@ -1,6 +1,7 @@
 """Physically provisioned enterprise proxy and CA validation; no live system writes."""
 import importlib.util
 import json
+import os
 from pathlib import Path
 
 import pytest
@@ -44,7 +45,8 @@ def test_provision_proxy_without_embedding_credentials(tmp_path, monkeypatch):
     provision.install_network(config)
     stored = root / "etc/ulsim/proxy.json"
     assert json.loads(stored.read_text()) == values
-    assert stored.stat().st_mode & 0o777 == 0o600
+    if os.name != "nt":
+        assert stored.stat().st_mode & 0o777 == 0o600
     assert 'Acquire::https::Proxy "http://192.0.2.1:8080";' in (root / "etc/apt/apt.conf.d/80ulsim-proxy").read_text()
     assert calls[0][:2] == ("systemctl", "set-environment")
     assert provision.os.environ == values
@@ -55,3 +57,13 @@ def test_no_provisioning_does_not_change_network_trust(tmp_path, monkeypatch):
     provision.install_network(config)
     assert calls == []
     assert not (root / "etc/ulsim/proxy.json").exists()
+
+
+def test_real_ssh_keygen_host_key_comments_are_normalized(tmp_path):
+    import subprocess
+    key = tmp_path / 'unique_host_key'
+    subprocess.run(['ssh-keygen', '-q', '-t', 'ed25519', '-N', '', '-C', 'physical USB identity', '-f', str(key)], check=True)
+    derived = subprocess.check_output(['ssh-keygen', '-y', '-f', str(key)], text=True)
+    public = key.with_suffix('.pub').read_text()
+    assert provision.validate_public_keys(derived) == provision.validate_public_keys(public)
+    assert 'physical USB identity' not in provision.validate_public_keys(derived)

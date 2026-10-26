@@ -82,6 +82,11 @@ def test_dns_probe_requires_matching_id_and_nxdomain(monkeypatch):
         def sendto(self, packet, address): self.packet = packet
         def recvfrom(self, size): return self.packet[:2] + struct.pack('!H', 0x8183) + b'\0' * 8, ('127.0.0.1', 53)
     monkeypatch.setattr(socket, 'socket', lambda *args: Socket())
+    class Response:
+        def __enter__(self): return self
+        def __exit__(self,*args): pass
+        def read(self,*args): return b'{"reason":"FilteredBlackList"}'
+    monkeypatch.setattr(profiles.urllib.request, 'urlopen', lambda *a,**kw: Response())
     assert profiles._dns_check()
 
 

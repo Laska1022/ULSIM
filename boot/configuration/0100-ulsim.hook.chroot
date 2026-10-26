@@ -1,5 +1,10 @@
 #!/bin/sh
 set -eu
+# Source checkout uid may match the live administrator. Privileged RPC modules
+# must never retain host checkout ownership or user-writable permissions.
+chown -R root:root /usr/local/lib/python3.13/dist-packages/ulsim
+find /usr/local/lib/python3.13/dist-packages/ulsim -type d -exec chmod 755 {} +
+find /usr/local/lib/python3.13/dist-packages/ulsim -type f -exec chmod 644 {} +
 id ulsim >/dev/null 2>&1 || useradd --create-home --shell /bin/bash ulsim
 passwd -l ulsim
 install -d -m 700 /home/ulsim/.ssh /etc/ulsim

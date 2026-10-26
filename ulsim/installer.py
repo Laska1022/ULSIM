@@ -115,7 +115,7 @@ def protected_disks():
 
 
 def validate_live_disk(plan, report):
-    from .hardware import validate_destination
+    from .hardware import validate_destination, disk_identity
     validate_destination(report, plan['disk'])
     if report.get('device_id') != plan['device_id']:
         raise ValueError('Approved device identity does not match this target')
@@ -133,6 +133,7 @@ def validate_live_disk(plan, report):
     if len(tree) != 1 or tree[0]['type'] != 'disk':
         raise ValueError('Destination must be one whole disk')
     actual = tree[0]
+    actual.update(disk_identity(path, actual.get('serial'), actual.get('wwn')))
     if int(actual['size']) != disk['size_bytes']:
         raise ValueError('Destination size changed since approval')
     if not disk.get('serial') and not disk.get('wwn'):

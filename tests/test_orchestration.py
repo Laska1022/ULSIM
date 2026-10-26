@@ -67,3 +67,19 @@ def test_resume_never_starts_an_installer(tmp_path,monkeypatch):
     assert flow.finish_install(inventory,plan,resume=True)['stage']=='complete'
     assert 'install' not in remote.ops
     assert 'reboot' not in remote.ops
+
+
+def test_connection_failure_resumes_polling_without_new_disk_job(tmp_path,monkeypatch):
+    inventory,plan=setup_job(tmp_path,'preparing')
+    class Unreachable:
+        def rpc(self,*args): raise OSError('Network interrupted')
+    monkeypatch.setattr(flow,'remote_for',lambda device:Unreachable())
+    with pytest.raises(OSError):
+        flow.finish_install(inventory,plan)
+    assert inventory.job(plan['plan_id'])['detail']['resume_stage']=='preparing'
+    remote=Remote()
+    monkeypatch.setattr(flow,'remote_for',lambda device:remote)
+    monkeypatch.setattr(flow.time,'sleep',lambda seconds:None)
+    monkeypatch.setattr(flow,'reconnect',lambda *a: (remote,{'plan_id':'approved-plan','os':{'id':'debian'}}))
+    assert flow.finish_install(inventory,plan,resume=True)['stage']=='complete'
+    assert remote.ops==['status','reboot','configure','services','health']

@@ -11,6 +11,7 @@ import argparse
 import hashlib
 import json
 import os
+import secrets
 from pathlib import Path
 import shutil
 import socket
@@ -148,6 +149,8 @@ def main() -> int:
     parser.add_argument("--partition-table", choices=("gpt", "mbr"), default="gpt")
     parser.add_argument("--accel", choices=("tcg", "kvm"), default="tcg")
     parser.add_argument("--memory", type=int, default=2048)
+    parser.add_argument("--all-profiles", action="store_true",
+                        help="After required web acceptance, deploy and verify DNS, Samba, WireGuard and DLNA")
     parser.add_argument("--provision-network", type=Path,
                         help="Private directory with optional proxy.json/trusted-ca.crt for this VM only")
     parser.add_argument("--boot-timeout", type=int, default=600)
@@ -167,6 +170,19 @@ def main() -> int:
               "image": str(args.image), "passed": False, "checks": []}
     vm = None
 
+    def controller(*arguments):
+        command = [sys.executable, '-m', 'ulsim', '--state-dir', str(work / 'controller-state'),
+                   *map(str, arguments), '--json']
+        process = subprocess.run(command, cwd=Path(__file__).resolve().parents[2],
+                                 text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        try:
+            response = json.loads(process.stdout)
+        except ValueError:
+            raise RuntimeError(f'Controller {arguments[0]} returned invalid JSON (exit {process.returncode})') from None
+        if process.returncode:
+            raise RuntimeError(f'Controller {arguments[0]} failed: {response.get("error", "unknown error")}')
+        return response
+
     def passed(check: str) -> None:
         result["checks"].append(check)
         print(f"PASS: {check}", flush=True)
@@ -183,8 +199,11 @@ def main() -> int:
         vm.start(live=True)
         live_identity = wait_remote(vm, remote, args.boot_timeout)
         assert live_identity["mode"] == "live" and live_identity["os_id"] == "debian"
-        passed("live boot, DHCP, SSH key authentication and pinned host identity")
-        report = remote.rpc("inspect")
+        paired = controller('pair', '--host', '127.0.0.1', '--port', vm.ssh_port,
+                            '--fingerprint', host_fingerprint, '--key', key, '--name', 'vm')
+        assert paired['device_id'] == live_identity['device_id']
+        passed("live boot, DHCP, CLI pairing, SSH key authentication and pinned host identity")
+        report = controller('inspect', '--device', 'vm')
         (work / "hardware.json").write_text(json.dumps(report, indent=2))
         assert report["boot_mode"] == args.firmware, report.get("boot_mode")
         assert report["architecture"] == "x86_64", report.get("architecture")
@@ -202,9 +221,11 @@ def main() -> int:
             else:
                 raise AssertionError("Installer medium was accepted as install target")
         passed("hardware report, disposable disk identity, active installer protection")
-        plan = create_plan(report, targets[0]["path"], "vm-ulsim", ["web"], public_key,
-                           partition_table=args.partition_table)
-        (work / "plan.json").write_text(json.dumps(plan, indent=2))
+        proposed = controller('plan', '--device', 'vm', '--disk', targets[0]['path'],
+                              '--hostname', 'vm-ulsim', '--profile', 'web',
+                              '--partition-table', args.partition_table, '--output', work / 'plan.json')
+        plan = proposed['plan']
+        assert plan == json.loads((work / 'plan.json').read_text())
         try:
             remote.rpc("install", {"plan": plan, "approval": "unapproved"})
         except RuntimeError as exc:
@@ -213,7 +234,8 @@ def main() -> int:
         else:
             raise AssertionError("Target accepted installation without valid explicit approval")
         passed("installation plan and rejection of missing approval")
-        remote.rpc("install", {"plan": plan, "approval": plan["plan_id"]})
+        queued = controller('install', '--plan', work / 'plan.json', '--approve', plan['plan_id'])
+        assert queued['plan_id'] == plan['plan_id']
         deadline = time.monotonic() + args.install_timeout
         previous = None
         while time.monotonic() < deadline:
@@ -249,17 +271,35 @@ def main() -> int:
         installed_report = remote.rpc("inspect")
         assert installed_report["boot_mode"] == args.firmware
         passed("installed-disk boot, DHCP, SSH reconnection and host identity continuity")
-        health = remote.rpc("health")
+        controller('pair', '--host', '127.0.0.1', '--port', vm.ssh_port,
+                   '--fingerprint', host_fingerprint, '--key', key, '--name', 'vm')
+        inventory = controller('servers')
+        assert len(inventory['devices']) == 1 and inventory['devices'][0]['installed']
+        health = controller('health', '--device', 'vm')
         (work / "health.json").write_text(json.dumps(health, indent=2))
-        configured = remote.rpc("configure", {"profiles": ["web"], "config": {}})
+        configured = controller('services', '--device', 'vm', '--profile', 'web', '--configure')
         (work / "configure.json").write_text(json.dumps(configured, indent=2))
         local_http = urllib.request.build_opener(urllib.request.ProxyHandler({}))
         with local_http.open(f"http://127.0.0.1:{vm.http_port}/", timeout=30) as response:
             body = response.read().decode()
             assert response.status == 200 and "ulsim" in body.lower(), body[:200]
         passed("nginx deployment and HTTP response through the installed server firewall")
-        services = remote.rpc("services", {"profiles": ["web"]})
+        services = controller('services', '--device', 'vm', '--profile', 'web', '--verify')
         (work / "services.json").write_text(json.dumps(services, indent=2))
+        assert services.get("ok") is True and services.get("profiles", {}).get("web", {}).get("ok") is True
+        if args.all_profiles:
+            # This credential only exists in memory and the disposable VM's Samba
+            # database. Never place it in argv, files, result documents, or logs.
+            config = {"fileserver": {"password": secrets.token_urlsafe(24)}}
+            profiles = ["dns", "fileserver", "vpn", "web", "media"]
+            configured = remote.rpc("configure", {"profiles": profiles, "config": config})
+            (work / "all-profiles.json").write_text(json.dumps(configured, indent=2))
+            assert configured.get("ok") is True
+            status = remote.rpc("services", {"profiles": profiles, "verify": True})
+            assert status.get("ok") is True and set(status.get("profiles", {})) == set(profiles)
+            assert all(value.get("ok") is True for value in status["profiles"].values())
+            (work / "all-profiles-status.json").write_text(json.dumps(status, indent=2))
+            passed("all five native service profiles installed and functionally verified")
         result["passed"] = True
         print("PASS: complete end-to-end installation", flush=True)
         return 0

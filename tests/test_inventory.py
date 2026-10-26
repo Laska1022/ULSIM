@@ -30,5 +30,5 @@ def test_failed_resume_does_not_allow_disk_rewrite(tmp_path):
     inventory.transition('hash','approved')
     inventory.transition('hash','failed')
     with pytest.raises(ValueError):
-        inventory.transition('hash','preparing')
+        inventory.transition('hash','approved')
     inventory.transition('hash','reconnecting')
