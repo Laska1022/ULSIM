@@ -17,6 +17,26 @@ def result(stdout='', code=0):
     return SimpleNamespace(stdout=stdout, returncode=code)
 
 
+@pytest.mark.parametrize('boot_mode,table', [('bios', 'gpt'), ('bios', 'mbr'), ('uefi', 'gpt')])
+def test_partition_preview_matches_installer_partition_sizes(boot_mode, table):
+    from ulsim.planning import create_plan, partition_layout
+    hardware = {
+        'device_id': 'layout-test', 'architecture': 'x86_64', 'boot_mode': boot_mode,
+        'installer_media': {'identified': True, 'disk_paths': ['/dev/sdb']},
+        'disks': [{'path': '/dev/vda', 'size_bytes': 16 * 1024**3, 'serial': 'LAYOUT-DISK',
+                   'wwn': None, 'installer': False, 'mounted': False, 'read_only': False}],
+    }
+    key = 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIAABAgMEBQYHCAkKCwwNDg8QERITFBUWFxgZGhscHR4f'
+    proposed = create_plan(hardware, '/dev/vda', 'server', [], key, partition_table=table)
+    preview = partition_layout(proposed)
+    script, root_partition, esp_partition = inst.partition_layout(proposed)
+    assert preview[-1]['number'] == root_partition
+    assert preview[-1]['filesystem'] == 'ext4'
+    if len(preview) > 1:
+        assert f"size={preview[0]['size_mib']}M," in script
+    assert (esp_partition is not None) == (boot_mode == 'uefi')
+
+
 def test_partitions_cover_all_supported_boot_modes():
     layout, root, esp = inst.partition_layout({'boot_mode': 'uefi', 'partition_table': 'gpt'})
     assert 'label: gpt' in layout and 'size=512M' in layout

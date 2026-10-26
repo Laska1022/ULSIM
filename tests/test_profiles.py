@@ -1,11 +1,56 @@
 import base64
+import io
+import os
 import socket
 import struct
 import subprocess
+import tarfile
 
 import pytest
 
 from ulsim import profiles
+
+
+def _adguard_archive(path, entries):
+    with tarfile.open(path, 'w:gz') as archive:
+        for name, kind in entries:
+            member = tarfile.TarInfo(name)
+            member.type = kind
+            if kind == tarfile.REGTYPE:
+                member.size = len(b'AdGuard executable')
+                archive.addfile(member, io.BytesIO(b'AdGuard executable'))
+            else:
+                member.linkname = '/etc/passwd'
+                archive.addfile(member)
+
+
+@pytest.mark.parametrize('name', ['AdGuardHome/AdGuardHome', './AdGuardHome/AdGuardHome'])
+def test_adguard_extracts_upstream_executable_only(tmp_path, name):
+    archive, binary = tmp_path / 'release.tar.gz', tmp_path / 'installed' / 'AdGuardHome'
+    _adguard_archive(archive, [(name, tarfile.REGTYPE), ('../escape', tarfile.REGTYPE)])
+    profiles._extract_adguard_binary(archive, binary)
+    assert binary.read_bytes() == b'AdGuard executable'
+    assert list(binary.parent.iterdir()) == [binary]
+    assert not (tmp_path / 'escape').exists()
+    if os.name != 'nt':
+        assert binary.stat().st_mode & 0o777 == 0o755
+
+
+@pytest.mark.parametrize('entries', [
+    [('AdGuardHome/AdGuardHome', tarfile.SYMTYPE)],
+    [('./AdGuardHome/AdGuardHome', tarfile.LNKTYPE)],
+    [('AdGuardHome/AdGuardHome', tarfile.DIRTYPE)],
+    [('AdGuardHome/AdGuardHome', tarfile.REGTYPE), ('./AdGuardHome/AdGuardHome', tarfile.REGTYPE)],
+    [('AdGuardHome/AdGuardHome', tarfile.REGTYPE), ('AdGuardHome/AdGuardHome', tarfile.REGTYPE)],
+    [('other/AdGuardHome', tarfile.REGTYPE)],
+])
+def test_adguard_rejects_unsafe_or_ambiguous_executable(tmp_path, entries):
+    archive, binary = tmp_path / 'release.tar.gz', tmp_path / 'AdGuardHome'
+    binary.write_bytes(b'previous executable')
+    _adguard_archive(archive, entries)
+    with pytest.raises(RuntimeError, match='AdGuard Home'):
+        profiles._extract_adguard_binary(archive, binary)
+    assert binary.read_bytes() == b'previous executable'
 
 
 def test_defaults_and_storage_validation():

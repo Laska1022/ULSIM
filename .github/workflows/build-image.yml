@@ -30,7 +30,11 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        firmware: [bios, uefi]
+        include:
+          - firmware: bios
+            profile_args: --all-profiles
+          - firmware: uefi
+            profile_args: ''
     steps:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
@@ -48,8 +52,8 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y qemu-system-x86 qemu-utils ovmf dosfstools mtools
           python -m pip install -e '.[test]'
-      - name: Boot, install Debian, reconnect, and verify web service
-        run: python tests/vm/run.py --image dist/ulsim-live-amd64.img --firmware ${{ matrix.firmware }} --work-dir dist/vm-${{ matrix.firmware }}
+      - name: Boot, install Debian, reconnect, and verify service profiles
+        run: python tests/vm/run.py --image dist/ulsim-live-amd64.img --firmware ${{ matrix.firmware }} --work-dir dist/vm-${{ matrix.firmware }} ${{ matrix.profile_args }}
       - uses: actions/upload-artifact@v4
         if: always()
         with:

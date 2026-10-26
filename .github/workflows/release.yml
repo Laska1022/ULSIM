@@ -5,10 +5,12 @@ on:
 permissions:
   contents: read
 jobs:
+  tests:
+    uses: ./.github/workflows/test.yml
   validate:
     uses: ./.github/workflows/build-image.yml
   release:
-    needs: validate
+    needs: [tests, validate]
     runs-on: ubuntu-24.04
     permissions:
       contents: write
@@ -23,7 +25,7 @@ jobs:
           python-version: '3.13'
       - name: Build controller wheel
         run: python -m pip install build && python -m build
-      - name: Publish release assets after BIOS and UEFI tests pass
+      - name: Publish release assets after controller, BIOS, UEFI, and profile tests pass
         env:
           GH_TOKEN: ${{ github.token }}
         run: |

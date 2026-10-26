@@ -180,6 +180,28 @@ def firewall(config):
         os.unlink(temporary)
 
 
+def _extract_adguard_binary(archive, binary):
+    """Copy the pinned release executable without extracting archive paths."""
+    with tarfile.open(archive, 'r:gz') as tar:
+        members = [member for member in tar.getmembers()
+                   if member.name in ('AdGuardHome/AdGuardHome', './AdGuardHome/AdGuardHome')]
+        if len(members) != 1:
+            raise RuntimeError('AdGuard Home archive executable is missing or ambiguous')
+        member = members[0]
+        if not member.isfile():
+            raise RuntimeError('AdGuard Home executable is not a regular file')
+        binary.parent.mkdir(parents=True, exist_ok=True)
+        fd, temporary = tempfile.mkstemp(prefix='.AdGuardHome-', dir=binary.parent)
+        try:
+            with os.fdopen(fd, 'wb') as output, tar.extractfile(member) as source:
+                shutil.copyfileobj(source, output)
+            os.chmod(temporary, 0o755)
+            os.replace(temporary, binary)
+        finally:
+            if os.path.exists(temporary):
+                os.unlink(temporary)
+
+
 def _dns(config):
     # AdGuard owns port 53. Keep DHCP-provided upstream resolution while freeing
     # systemd-resolved's local stub; changing DNS service must not break apt.
@@ -201,15 +223,7 @@ def _dns(config):
                     output.write(block); digest.update(block)
             if digest.hexdigest() != ADGUARD_SHA256:
                 raise RuntimeError('AdGuard Home release checksum mismatch')
-            with tarfile.open(archive, 'r:gz') as tar:
-                member = tar.getmember('AdGuardHome/AdGuardHome')
-                if not member.isfile():
-                    raise RuntimeError('AdGuard Home executable is not a regular file')
-                directory.mkdir(parents=True, exist_ok=True)
-                with tar.extractfile(member) as source, (directory / 'AdGuardHome.new').open('wb') as output:
-                    shutil.copyfileobj(source, output)
-                os.chmod(directory / 'AdGuardHome.new', 0o755)
-                os.replace(directory / 'AdGuardHome.new', binary)
+            _extract_adguard_binary(archive, binary)
             _write(stamp, ADGUARD_VERSION + '\n')
     settings = {'http': {'address': '127.0.0.1:3000'}, 'users': [],
                 'dns': {'bind_hosts': ['0.0.0.0'], 'port': 53,

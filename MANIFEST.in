@@ -1,5 +1,5 @@
 include AGENTS.md PROGRESS.md IMPLEMENTATION-CONTRACT.md LICENSE
-recursive-include docs *.md
+recursive-include docs *.md *.json
 recursive-include scripts *.ps1
 recursive-include boot *.py *.sh *.conf *.cfg *.service *.chroot Dockerfile
 recursive-include tests *.py *.md Dockerfile

@@ -1,0 +1,23 @@
+{
+  "firmware": "bios",
+  "partition_table": "gpt",
+  "image": "ulsim-live-amd64.img (clean build before AdGuard extraction fix)",
+  "passed": false,
+  "checks": [
+    "live boot, DHCP, CLI pairing, SSH key authentication and pinned host identity",
+    "hardware report, disposable disk identity, active installer protection",
+    "installation plan and rejection of missing approval",
+    "Debian debootstrap, kernel, partitioning and bootloader installation",
+    "installed-disk boot, DHCP, SSH reconnection and host identity continuity",
+    "controller install --wait automatically reconnects, configures, verifies and completes its journal",
+    "nginx deployment and HTTP response through the installed server firewall"
+  ],
+  "error": "RuntimeError: Remote command failed (1): \"filename 'AdGuardHome/AdGuardHome' not found\"",
+  "image_sha256": "0ffc114c72b32bed73000ad602f1667a2d06126ebed03ad6bbe1b52ee0276ea2",
+  "compressed_image_sha256": "d1b6066d4b25ca08406c51734b9d07c83bcafda19b09c97a3ab7581c502745ff",
+  "image_source_revision": "600b82af4631bcd5a95b2115df130ee1ea83529f",
+  "image_built_utc": "2026-10-26T11:30:10Z",
+  "environment": "Codex cloud, QEMU TCG; disposable 16GiB qcow2 disk, no physical hardware",
+  "scope": "Full controller install --wait and web service; extended all-profile deployment failed at AdGuard extraction",
+  "hash_recorded_after_run": true
+}

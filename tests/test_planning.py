@@ -154,16 +154,22 @@ def test_unknown_hardware_does_not_invent_recommendation():
     assert result['budget']['ram_bytes'] is None
 
 
-@pytest.mark.parametrize('boot_mode,table', [('bios', 'gpt'), ('bios', 'mbr'), ('uefi', 'gpt')])
-def test_partition_preview_matches_installer_partition_sizes(boot_mode, table):
-    from ulsim.installer import partition_layout as installer_layout
+@pytest.mark.parametrize('boot_mode,table,expected', [
+    ('bios', 'gpt', [
+        {'number': 1, 'purpose': 'BIOS boot', 'filesystem': None, 'size_mib': 2},
+        {'number': 2, 'purpose': 'Linux root', 'filesystem': 'ext4', 'size_mib': 'remaining'},
+    ]),
+    ('bios', 'mbr', [
+        {'number': 1, 'purpose': 'Linux root (bootable)', 'filesystem': 'ext4', 'size_mib': 'remaining'},
+    ]),
+    ('uefi', 'gpt', [
+        {'number': 1, 'purpose': 'EFI system', 'filesystem': 'fat32', 'size_mib': 512},
+        {'number': 2, 'purpose': 'Linux root', 'filesystem': 'ext4', 'size_mib': 'remaining'},
+    ]),
+])
+def test_controller_partition_preview_on_every_platform(boot_mode, table, expected):
+    # Controller planning must run without importing the Linux-only installer.
     hardware = report()
     hardware['boot_mode'] = boot_mode
     proposed = create_plan(hardware, '/dev/vda', 'server', [], key(), partition_table=table)
-    preview = partition_layout(proposed)
-    script, root_partition, esp_partition = installer_layout(proposed)
-    assert preview[-1]['number'] == root_partition
-    assert preview[-1]['filesystem'] == 'ext4'
-    if len(preview) > 1:
-        assert f"size={preview[0]['size_mib']}M," in script
-    assert (esp_partition is not None) == (boot_mode == 'uefi')
+    assert partition_layout(proposed) == expected
