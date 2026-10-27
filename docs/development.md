@@ -20,12 +20,12 @@ Use a Linux Docker engine, approximately 20 GB free space and at least 4 GB RAM.
 
 ## Acceptance tests
 
-See [tests/vm/README.md](../tests/vm/README.md). Both BIOS and UEFI must pass live boot, DHCP, pinned SSH, inspection, safe plan, actual Debian install, independent installed-disk boot, trust continuity and Nginx HTTP response. The runner uses disposable virtual disks and retains logs. TCG works without `/dev/kvm`, but is slower. Optional BIOS/MBR testing uses `--partition-table mbr`.
+See [tests/vm/README.md](../tests/vm/README.md). BIOS/GPT, BIOS/MBR and UEFI/GPT must pass live boot, DHCP, pinned SSH, inspection, safe plan, actual Debian install, independent installed-disk boot, trust continuity and Nginx HTTP response. The release matrix uses 1 GiB RAM for BIOS/MBR and 2 GiB for GPT. BIOS/GPT also requires all five profiles, reconfiguration and real reboot persistence. The runner uses disposable virtual disks and retains logs. TCG works without `/dev/kvm`, but is slower.
 
 ## CI and releases
 
 `.github/workflows/test.yml` runs Windows and Linux controller/safety tests. Select **Build and verify live image** in GitHub Actions and **Run workflow** for image+BIOS+UEFI acceptance. Download `ulsim-live-amd64` and VM evidence artifacts from the successful run. A failed or unexecuted workflow is not a validated release.
 
-After all checks pass, push a reviewed `v*` tag to run `.github/workflows/release.yml`; it rebuilds, waits for both VM checks, builds the controller package, and publishes assets using GitHub's workflow token. Source archives are available on the release page. `install-windows.ps1` expects the extracted source tree, not the standalone script alone. Do not tag an unverified revision as a finished product.
+After all checks pass, push a reviewed `v*` tag to run `.github/workflows/release.yml`; it rebuilds, waits for the Windows/Linux tests and all three VM scenarios, builds the controller package, and publishes assets using GitHub's workflow token. Source archives are available on the release page. `install-windows.ps1` expects the extracted source tree, not the standalone script alone. Do not tag an unverified revision as a finished product.
 
 Cloud execution cannot establish compatibility with every legacy BIOS, Wi-Fi adapter, Windows installation, or physical disk. Keep measured results and unrun checks explicit in PROGRESS.md and release notes.

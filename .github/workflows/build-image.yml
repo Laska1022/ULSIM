@@ -32,8 +32,16 @@ jobs:
       matrix:
         include:
           - firmware: bios
+            partition_table: gpt
+            memory: 2048
             profile_args: --all-profiles
           - firmware: uefi
+            partition_table: gpt
+            memory: 2048
+            profile_args: ''
+          - firmware: bios
+            partition_table: mbr
+            memory: 1024
             profile_args: ''
     steps:
       - uses: actions/checkout@v4
@@ -53,12 +61,15 @@ jobs:
           sudo apt-get install -y qemu-system-x86 qemu-utils ovmf dosfstools mtools
           python -m pip install -e '.[test]'
       - name: Boot, install Debian, reconnect, and verify service profiles
-        run: python tests/vm/run.py --image dist/ulsim-live-amd64.img --firmware ${{ matrix.firmware }} --work-dir dist/vm-${{ matrix.firmware }} ${{ matrix.profile_args }}
+        run: |
+          accelerator=tcg
+          if [ -r /dev/kvm ] && [ -w /dev/kvm ]; then accelerator=kvm; fi
+          python tests/vm/run.py --image dist/ulsim-live-amd64.img --firmware ${{ matrix.firmware }} --partition-table ${{ matrix.partition_table }} --memory ${{ matrix.memory }} --work-dir dist/vm-${{ matrix.firmware }}-${{ matrix.partition_table }} --accel "$accelerator" ${{ matrix.profile_args }}
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: vm-evidence-${{ matrix.firmware }}
+          name: vm-evidence-${{ matrix.firmware }}-${{ matrix.partition_table }}
           path: |
-            dist/vm-${{ matrix.firmware }}/*.log
-            dist/vm-${{ matrix.firmware }}/*.json
+            dist/vm-${{ matrix.firmware }}-${{ matrix.partition_table }}/*.log
+            dist/vm-${{ matrix.firmware }}-${{ matrix.partition_table }}/*.json
           if-no-files-found: warn

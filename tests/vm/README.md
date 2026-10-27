@@ -5,7 +5,7 @@ only**. The runner creates a new 16 GiB qcow2 disk and refuses an existing work
 directory. It never accepts a host disk as an installation destination. No
 installation success is mocked.
 
-Build the live image first using `boot/build/build.sh`. On Debian/Ubuntu install
+Build the live image first using `bash boot/build/docker-build.sh`. On Debian/Ubuntu install
 QEMU, OVMF, mtools, dosfstools, openssh-client, and the controller dependencies.
 Then, from the repository root:
 
@@ -78,3 +78,13 @@ The runner generates an ephemeral Samba password in memory; it never appears
 in argv, saved plans or artifacts. This extended check needs GitHub release
 and DNS upstream access in addition to Debian mirrors. A failure is reported
 as a failed acceptance run, with individual check evidence retained.
+
+The extended run then configures the same profiles again without supplying a new
+Samba password, confirms the existing credential still authenticates, and checks
+that the WireGuard public key is unchanged. It requests a real installed-server
+reboot and requires a different kernel boot ID before accepting reconnection.
+After reboot, the original pinned SSH/device identity, all five functional
+service checks, Samba login, WireGuard key, and external Nginx HTTP response must
+still pass. Results are retained in `all-profiles-reconfigured.json` and
+`all-profiles-after-reboot.json`. These checks do not establish a VPN client
+handshake, media playback, or successful download of every public DNS filter list.

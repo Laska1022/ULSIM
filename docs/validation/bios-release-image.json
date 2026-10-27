@@ -1,0 +1,21 @@
+{
+  "firmware": "bios",
+  "partition_table": "gpt",
+  "image": "ulsim-live-amd64.img",
+  "image_sha256": "88f22fe81d1c3e24d761d18990b45c9693447aaa9d1435333bf646612b6e0221",
+  "passed": true,
+  "checks": [
+    "live boot, DHCP, CLI pairing, SSH key authentication and pinned host identity",
+    "hardware report, disposable disk identity, active installer protection",
+    "installation plan and rejection of missing approval",
+    "Debian debootstrap, kernel, partitioning and bootloader installation",
+    "installed-disk boot, DHCP, SSH reconnection and host identity continuity",
+    "controller install --wait automatically reconnects, configures, verifies and completes its journal",
+    "nginx deployment and HTTP response through the installed server firewall",
+    "all five native service profiles installed and functionally verified"
+  ],
+  "image_compressed_sha256": "3dd494c38bb0bd02e93667e368a3a8cb68d9b62ea8d1d1324773ab542bab8a21",
+  "source_revision": "956be8ffbf1081b173a6e3df7d3b7d9146b2398c",
+  "environment": "QEMU TCG, disposable 16GiB disk, 2GiB RAM; no physical hardware",
+  "scope_note": "This process started before the new profile persistence helper was loaded. All five initial deployments passed; reconfiguration/reboot was validated in a separate development-overlay test."
+}

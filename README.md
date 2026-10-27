@@ -2,7 +2,7 @@
 
 ULSIM lets a Windows 11 computer inspect an old x86-64 PC, approve a disk installation, install Debian 13 minimal over SSH, and manage its server applications. Codex CLI can operate the deterministic `ulsim` CLI using your existing ChatGPT login. No WSL or additional AI API key is required.
 
-**Validation status:** implementation and tests are under active integration. See [PROGRESS.md](PROGRESS.md) for measured results. Do not treat an untested build as a verified release. The GitHub release workflow requires successful BIOS and UEFI installation tests before publishing.
+**Validation status:** clean-image BIOS/UEFI installation, all five profiles, and separate profile reboot/persistence checks have passed. Final release gates and publication are pending. See [PROGRESS.md](PROGRESS.md) for measured results and [AI_HANDOFF.md](AI_HANDOFF.md) to resume development.
 
 The system has a Debian live USB, a Python Windows controller, and a target-side installer. Booting the USB never formats a disk. Installation requires the hash of a reviewed plan, rechecks disk serial/WWN and capacity on the target, and refuses the active installer medium. SSH uses a unique host key pinned through a physically provisioned USB; password and root SSH logins are disabled.
 
@@ -14,7 +14,7 @@ Implemented targets and profiles:
 
 ## Start on Windows
 
-1. Download a **verified** release's `ulsim-live-amd64.img.xz`, `SHA256SUMS.txt`, and source archive. Check the SHA-256 value with `Get-FileHash`. No verified image is available until the image/VM build succeeds.
+1. Download a **verified** release's `ulsim-live-amd64.img.xz`, `SHA256SUMS.txt`, and source archive. Check the SHA-256 value with `Get-FileHash`. Public release publication is still pending; its status is tracked in [PROGRESS.md](PROGRESS.md).
 2. Use balenaEtcher to write the compressed image, or extract `.img` with 7-Zip and use Rufus in DD mode. This erases the selected USB. See [USB preparation](docs/create-usb.md).
 3. Extract the source archive, open PowerShell in its directory, and run `powershell -ExecutionPolicy Bypass -File .\scripts\install-windows.ps1`.
 4. Prepare a **second small FAT32 USB**, labelled `ULSIMCFG`, using Windows Disk Management. This separate volume avoids relying on Windows mounting the Linux live image. Run `ulsim configure-usb --volume E:\` (replace `E:` with that configuration USB). Save the printed record path. Add `--ssid "Network"` to prompt securely for Wi-Fi.

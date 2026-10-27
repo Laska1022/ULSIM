@@ -1,0 +1,49 @@
+{
+  "passed": true,
+  "checks": [
+    "Independent installed-disk boot with pinned SSH identity",
+    "Reconfigure all profiles without resetting Samba credential or WireGuard identity",
+    "Real target RPC reboot changes kernel boot ID while preserving pinned SSH and installed identity",
+    "All five profiles remain functional after reboot, original Samba login succeeds, and external HTTP responds"
+  ],
+  "base_evidence": "profile-recheck-02",
+  "purpose": "Persistence recheck on a new overlay of a development-corrected installed disk; not clean-image installation acceptance",
+  "profiles_sha256": "5cf9a79cd7dfdc3506af36bdd6438ae1c257022e7581f5a7dceee7f6e7a27efa",
+  "reboot_evidence": {
+    "boot_id_before": "7f1eddd1-56ee-4a2b-8d23-83f4b36255ed",
+    "boot_id_after": "9db46512-f255-4e36-9e17-5777187ea8e1",
+    "samba_existing_password_accepted": true,
+    "profiles": {
+      "dns": {
+        "active": true,
+        "functional": true,
+        "ok": true,
+        "service": "ulsim-adguard"
+      },
+      "fileserver": {
+        "active": true,
+        "functional": true,
+        "ok": true,
+        "service": "smbd"
+      },
+      "media": {
+        "active": true,
+        "functional": true,
+        "ok": true,
+        "service": "minidlna"
+      },
+      "vpn": {
+        "active": true,
+        "functional": true,
+        "ok": true,
+        "service": "wg-quick@wg0"
+      },
+      "web": {
+        "active": true,
+        "functional": true,
+        "ok": true,
+        "service": "nginx"
+      }
+    }
+  }
+}

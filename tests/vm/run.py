@@ -19,6 +19,7 @@ import subprocess
 import sys
 import time
 import urllib.request
+import uuid
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
@@ -140,6 +141,76 @@ def wait_remote(vm: VirtualMachine, remote, timeout: int) -> dict:
     raise TimeoutError(f"SSH unavailable after {timeout}s: {last_error}; logs: {vm.serial_path}")
 
 
+def verify_profile_persistence(vm, remote, profiles, work, timeout, samba_password):
+    """Exercise saved configuration, credentials, and a real installed-OS reboot."""
+    identity = remote.rpc('identity')
+    for attempt in range(20):
+        before = remote.rpc('services')
+        (work / 'all-profiles-before-reconfigure.json').write_text(json.dumps(before, indent=2))
+        assert set(before.get('profiles', {})) == set(profiles), f'Saved profile selection differs: {before}'
+        if before.get('ok') is True:
+            break
+        time.sleep(3)
+    else:
+        raise AssertionError(f'Configured profiles are unavailable before reconfiguration: {before}')
+    vpn_key = before['vpn']['public_key']
+    assert vpn_key
+    # A repeat deployment must reuse the existing Samba account and WireGuard key.
+    repeated = remote.rpc('configure', {'profiles': profiles, 'config': {}})
+    assert repeated.get('ok') is True
+    (work / 'all-profiles-reconfigured.json').write_text(json.dumps(repeated, indent=2))
+
+    def check_saved_state():
+        status = remote.rpc('services')
+        assert status.get('ok') is True and set(status.get('profiles', {})) == set(profiles)
+        assert all(value.get('ok') is True for value in status['profiles'].values())
+        assert status['vpn']['public_key'] == vpn_key, 'WireGuard identity changed'
+        # Credentials travel only over SSH stdin. Neither argv nor artifacts contain them.
+        remote.run('smbclient //127.0.0.1/share -A /dev/stdin -c ls',
+                   'username = ulsim\npassword = ' + samba_password + '\n')
+        local_http = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+        with local_http.open(f'http://127.0.0.1:{vm.http_port}/', timeout=30) as response:
+            assert response.status == 200 and b'ULSIM server is running' in response.read(65536)
+        return status
+
+    check_saved_state()
+    boot_id = uuid.UUID(remote.run('cat /proc/sys/kernel/random/boot_id').strip())
+    assert remote.rpc('reboot').get('ok') is True
+    deadline = time.monotonic() + timeout
+    last_error = 'The kernel boot ID did not change'
+    while time.monotonic() < deadline:
+        vm.ensure_running()
+        try:
+            new_boot_id = uuid.UUID(remote.run('cat /proc/sys/kernel/random/boot_id').strip())
+            if new_boot_id != boot_id:
+                after_identity = remote.rpc('identity')
+                assert after_identity['device_id'] == identity['device_id'], 'Device identity changed'
+                assert after_identity['plan_id'] == identity['plan_id'], 'Installed plan changed'
+                assert after_identity['mode'] == 'installed'
+                break
+        except Exception as exc:
+            last_error = str(exc)
+            if isinstance(exc, AssertionError) or 'mismatch' in last_error.lower() or 'host key changed' in last_error.lower():
+                raise
+        time.sleep(3)
+    else:
+        raise TimeoutError(f'Installed server failed to reboot and reconnect: {last_error}')
+    # systemd may accept SSH before all application services have finished starting.
+    for attempt in range(20):
+        try:
+            after = check_saved_state()
+            break
+        except (AssertionError, OSError, RuntimeError):
+            if attempt == 19:
+                raise
+            time.sleep(3)
+    evidence = {'ok': True, 'boot_id_before': str(boot_id), 'boot_id_after': str(new_boot_id),
+                'device_id': after_identity['device_id'], 'services': after,
+                'samba_existing_password_accepted': True}
+    (work / 'all-profiles-after-reboot.json').write_text(json.dumps(evidence, indent=2))
+    return evidence
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--image", required=True, type=Path)
@@ -150,7 +221,7 @@ def main() -> int:
     parser.add_argument("--accel", choices=("tcg", "kvm"), default="tcg")
     parser.add_argument("--memory", type=int, default=2048)
     parser.add_argument("--all-profiles", action="store_true",
-                        help="After required web acceptance, deploy and verify DNS, Samba, WireGuard and DLNA")
+                        help="Deploy all five profiles and verify configuration and reboot persistence")
     parser.add_argument("--provision-network", type=Path,
                         help="Private directory with optional proxy.json/trusted-ca.crt for this VM only")
     parser.add_argument("--boot-timeout", type=int, default=600)
@@ -335,6 +406,9 @@ def main() -> int:
             assert all(value.get("ok") is True for value in status["profiles"].values())
             (work / "all-profiles-status.json").write_text(json.dumps(status, indent=2))
             passed("all five native service profiles installed and functionally verified")
+            verify_profile_persistence(vm, remote, profiles, work, args.boot_timeout,
+                                       config['fileserver']['password'])
+            passed("profile reconfiguration and real reboot preserve SSH identity, Samba credentials, WireGuard key and all five services")
         result["passed"] = True
         print("PASS: complete end-to-end installation", flush=True)
         return 0

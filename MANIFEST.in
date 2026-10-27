@@ -1,4 +1,4 @@
-include AGENTS.md PROGRESS.md IMPLEMENTATION-CONTRACT.md LICENSE
+include AGENTS.md AI_HANDOFF.md PROGRESS.md IMPLEMENTATION-CONTRACT.md LICENSE
 recursive-include docs *.md *.json
 recursive-include scripts *.ps1
 recursive-include boot *.py *.sh *.conf *.cfg *.service *.chroot Dockerfile

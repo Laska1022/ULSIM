@@ -18,4 +18,6 @@ Run Codex from this repository on the Windows controller using the user's existi
 
 ## Development
 
+For an interrupted development task, read [AI_HANDOFF.md](AI_HANDOFF.md), [PROGRESS.md](PROGRESS.md), and the saved [product requirements](docs/product-requirements.md) first. Inspect the existing test processes/results and branch before repeating work. The handoff separates verified results, running checks, local-only artifacts, and remaining release steps.
+
 Use the existing checkout: cloud tasks are isolated; do not create Git worktrees unless explicitly requested. Install with `python -m pip install -e '.[test]'`, test with `python -m pytest`. Image and VM validation instructions are in docs/development.md. Preserve secure defaults, signed apt metadata and TLS verification. Mock tests are not a substitute for disposable-VM installation tests. Update PROGRESS.md with measured results and limitations; never claim image builds, CI, physical Windows, or hardware tests ran unless evidenced.

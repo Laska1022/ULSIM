@@ -1,0 +1,13 @@
+{
+  "passed": true,
+  "source_revision": "a78289ddbf85079938ec631947021eb5648b8927",
+  "url": "https://github.com/Laska1022/ULSIM/actions/runs/40412694400",
+  "evidence": "Public GitHub Actions summary reports Success, all four matrix jobs completed.",
+  "checks": [
+    "Windows and Linux controller tests on Python 3.11 and 3.13",
+    "Windows PowerShell 5.1 installation script, isolated installed-package import and installed CLI version/help on Python 3.13"
+  ],
+  "limitations": [
+    "Hosted Windows runner; no physical USB preparation or user laptop tested"
+  ]
+}

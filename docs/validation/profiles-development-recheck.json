@@ -1,0 +1,47 @@
+{
+  "passed": true,
+  "base_evidence": "bios-04",
+  "checks": [
+    "Corrected package copied into isolated overlay and SHA256 verified",
+    "Installed disk boot and pinned SSH identity",
+    "All five profiles configured and functionally verified"
+  ],
+  "purpose": "Development recheck on isolated overlay with corrected package; not a clean-image installation test",
+  "profiles_sha256": "5cf9a79cd7dfdc3506af36bdd6438ae1c257022e7581f5a7dceee7f6e7a27efa",
+  "source_revision": "956be8ffbf1081b173a6e3df7d3b7d9146b2398c",
+  "services": {
+    "ok": true,
+    "profiles": {
+      "dns": {
+        "active": true,
+        "functional": true,
+        "ok": true,
+        "service": "ulsim-adguard"
+      },
+      "fileserver": {
+        "active": true,
+        "functional": true,
+        "ok": true,
+        "service": "smbd"
+      },
+      "media": {
+        "active": true,
+        "functional": true,
+        "ok": true,
+        "service": "minidlna"
+      },
+      "vpn": {
+        "active": true,
+        "functional": true,
+        "ok": true,
+        "service": "wg-quick@wg0"
+      },
+      "web": {
+        "active": true,
+        "functional": true,
+        "ok": true,
+        "service": "nginx"
+      }
+    }
+  }
+}
